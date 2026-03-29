@@ -22,7 +22,7 @@ td { background: #063; }
 <body>
 
 <h1>📊 Análise dos PDFs Positivos</h1>
-<button onclick="exportarExcel()">Exportar Excel</button>
+<button onclick="exportarExcel()">📥 Exportar Excel</button>
 
 <table id="tabela">
 <thead>
@@ -58,11 +58,15 @@ function base64ToFile(base64, nome) {
   return new File([ia], nome, { type: "application/pdf" });
 }
 
-dados.forEach(async (item) => {
+for (let item of dados) {
+  processarArquivo(item);
+}
+
+async function processarArquivo(item) {
   const file = base64ToFile(item.dados, item.nome);
   const texto = await lerPDF(file);
   processar(texto, item.nome);
-});
+}
 
 async function lerPDF(file) {
   const reader = new FileReader();
@@ -77,6 +81,7 @@ async function lerPDF(file) {
         const pagina = await pdf.getPage(i);
         const conteudo = await pagina.getTextContent();
         conteudo.items.forEach(i => texto += i.str + " ");
+        texto += "\n";
       }
 
       resolve(texto.toLowerCase());
@@ -84,6 +89,18 @@ async function lerPDF(file) {
 
     reader.readAsArrayBuffer(file);
   });
+}
+
+// pegar empresa (primeira linha válida)
+function pegarEmpresa(texto) {
+  const linhas = texto.split("\n");
+  for (let l of linhas) {
+    l = l.trim();
+    if (l.length > 5 && !l.includes("balancete")) {
+      return l.toUpperCase();
+    }
+  }
+  return "-";
 }
 
 function pegar(linha) {
@@ -97,11 +114,13 @@ function num(v) {
 
 function processar(texto, nome) {
 
-  const resultado = pegar(texto.match(/2600.*?\n/)[0]);
-  const serv = pegar(texto.match(/2700.*?\n/)[0]);
-  const simp = pegar(texto.match(/2831.*?\n/)[0]);
-  const prod = pegar(texto.match(/2603.*?\n/)[0]);
-  const merc = pegar(texto.match(/2652.*?\n/)[0]);
+  const empresa = pegarEmpresa(texto);
+
+  const resultado = pegar((texto.match(/2600.*?\n/)||[""])[0]);
+  const serv = pegar((texto.match(/2700.*?\n/)||[""])[0]);
+  const simp = pegar((texto.match(/2831.*?\n/)||[""])[0]);
+  const prod = pegar((texto.match(/2603.*?\n/)||[""])[0]);
+  const merc = pegar((texto.match(/2652.*?\n/)||[""])[0]);
 
   const total1 = num(serv)*0.32 + num(simp)*0.05;
   const total2 = num(prod)*0.08 + num(merc)*0.08 + num(simp)*0.05;
@@ -113,7 +132,7 @@ function processar(texto, nome) {
 
   tr.innerHTML = `
   <td>${nome}</td>
-  <td>-</td>
+  <td>${empresa}</td>
   <td>${resultado}</td>
   <td>${total1.toFixed(2)}</td>
   <td class="${comp1==="MAIOR"?"maior":"menor"}">${comp1}</td>
