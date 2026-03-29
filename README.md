@@ -2,86 +2,176 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Resumo PDF Positivos</title>
+<title>Analisador de Balancete - Abas</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <style>
-body { font-family: Arial; background: #111; color: white; text-align: center; padding: 20px; }
+body {
+  font-family: Arial;
+  background: #111;
+  color: white;
+  text-align: center;
+  padding: 20px;
+}
+
 h1 { color: #00ffcc; }
-table { width: 95%; margin: 20px auto; border-collapse: collapse; }
-th, td { border: 1px solid #fff; padding: 8px; }
-th { background: #00aa88; }
-td { background: #063; }
-.maior { background: blue; }
-.menor { background: red; }
+
+.tabs {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.tab {
+  padding: 10px 20px;
+  cursor: pointer;
+  background: #333;
+  margin: 5px;
+  border-radius: 5px;
+}
+
+.tab.active {
+  background: #00aa88;
+}
+
+.conteudo {
+  display: none;
+}
+
+.conteudo.active {
+  display: block;
+}
+
+input { margin: 20px; padding: 10px; }
+
+button {
+  padding: 10px 20px;
+  margin: 10px;
+  background: #00aa88;
+  border: none;
+  border-radius: 5px;
+  color: white;
+  cursor: pointer;
+}
+
+.box {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 20px;
+}
+
+.coluna {
+  width: 45%;
+  padding: 15px;
+  border-radius: 10px;
+}
+
+.positivo { background: #063; }
+.negativo { background: #600; }
+
+li { margin: 8px 0; text-align: left; }
 </style>
 </head>
 
 <body>
 
-<h1>📊 Análise dos PDFs Positivos</h1>
-<button onclick="exportarExcel()">📥 Exportar Excel</button>
+<h1>📄 Analisador de Balancete</h1>
 
-<table id="tabela">
-<thead>
-<tr>
-<th>Arquivo</th>
-<th>Empresa</th>
-<th>Resultado</th>
-<th>Serviços+Simples</th>
-<th>Comparação</th>
-<th>Total Geral</th>
-<th>Comparação</th>
-</tr>
-</thead>
-<tbody id="tabelaResumo"></tbody>
-</table>
+<div class="tabs">
+  <div class="tab active" onclick="trocarAba(1)">Sistema 1</div>
+  <div class="tab" onclick="trocarAba(2)">Sistema 2</div>
+</div>
+
+<!-- ABA 1 -->
+<div id="aba1" class="conteudo active">
+  <input type="file" id="pdfInput1" multiple>
+  <br>
+  <button onclick="baixarZIP(1, 'negativos')">⬇️ Negativos</button>
+  <button onclick="baixarZIP(1, 'positivos')">⬇️ Positivos</button>
+
+  <div class="box">
+    <div class="coluna positivo">
+      <h2>✅ Positivos</h2>
+      <ul id="positivos1"></ul>
+    </div>
+
+    <div class="coluna negativo">
+      <h2>❌ Negativos</h2>
+      <ul id="negativos1"></ul>
+    </div>
+  </div>
+</div>
+
+<!-- ABA 2 -->
+<div id="aba2" class="conteudo">
+  <input type="file" id="pdfInput2" multiple>
+  <br>
+  <button onclick="baixarZIP(2, 'negativos')">⬇️ Negativos</button>
+  <button onclick="baixarZIP(2, 'positivos')">⬇️ Positivos</button>
+
+  <div class="box">
+    <div class="coluna positivo">
+      <h2>✅ Positivos</h2>
+      <ul id="positivos2"></ul>
+    </div>
+
+    <div class="coluna negativo">
+      <h2>❌ Negativos</h2>
+      <ul id="negativos2"></ul>
+    </div>
+  </div>
+</div>
 
 <script>
 
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+// Controle de abas
+function trocarAba(num) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".conteudo").forEach(c => c.classList.remove("active"));
 
-const dados = JSON.parse(localStorage.getItem("pdfsPositivos")) || [];
+  document.querySelectorAll(".tab")[num-1].classList.add("active");
+  document.getElementById("aba" + num).classList.add("active");
+}
 
-function base64ToFile(base64, nome) {
-  const byteString = atob(base64.split(',')[1]);
-  const ab = new ArrayBuffer(byteString.length);
-  const ia = new Uint8Array(ab);
+// Armazenamento separado
+const dados = {
+  1: { negativos: [], positivos: [] },
+  2: { negativos: [], positivos: [] }
+};
 
-  for (let i = 0; i < byteString.length; i++) {
-    ia[i] = byteString.charCodeAt(i);
+// Eventos inputs
+document.getElementById("pdfInput1").addEventListener("change", (e)=>processar(e,1));
+document.getElementById("pdfInput2").addEventListener("change", (e)=>processar(e,2));
+
+async function processar(event, aba) {
+
+  document.getElementById("positivos"+aba).innerHTML = "";
+  document.getElementById("negativos"+aba).innerHTML = "";
+
+  dados[aba].negativos = [];
+  dados[aba].positivos = [];
+
+  for (let file of event.target.files) {
+    const texto = await lerPDF(file);
+    analisar(texto, file.name, file, aba);
   }
-
-  return new File([ia], nome, { type: "application/pdf" });
-}
-
-for (let item of dados) {
-  processarArquivo(item);
-}
-
-async function processarArquivo(item) {
-  const file = base64ToFile(item.dados, item.nome);
-  const texto = await lerPDF(file);
-  processar(texto, item.nome);
 }
 
 async function lerPDF(file) {
   const reader = new FileReader();
 
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     reader.onload = async function () {
       const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
-
       let texto = "";
 
       for (let i = 1; i <= pdf.numPages; i++) {
         const pagina = await pdf.getPage(i);
         const conteudo = await pagina.getTextContent();
-        conteudo.items.forEach(i => texto += i.str + " ");
-        texto += "\n";
+
+        conteudo.items.forEach(item => texto += item.str + " ");
       }
 
       resolve(texto.toLowerCase());
@@ -91,61 +181,56 @@ async function lerPDF(file) {
   });
 }
 
-// pegar empresa (primeira linha válida)
-function pegarEmpresa(texto) {
-  const linhas = texto.split("\n");
-  for (let l of linhas) {
-    l = l.trim();
-    if (l.length > 5 && !l.includes("balancete")) {
-      return l.toUpperCase();
+function analisar(texto, nome, file, aba) {
+
+  texto = texto.replace(/\s+/g, " ");
+  const index = texto.indexOf("resultado do período");
+
+  if (index !== -1) {
+
+    const trecho = texto.substring(index, index + 300);
+    const valores = trecho.match(/\(?\s*\d{1,3}(?:\.\d{3})*,\d{2}\s*\)?/g);
+
+    if (valores && valores.length >= 4) {
+
+      const saldo = valores[3].replace(/\s+/g, "");
+      const ehNegativo = saldo.includes("(");
+
+      if (ehNegativo) {
+        adicionar("negativos"+aba, nome, saldo);
+        dados[aba].negativos.push(file);
+      } else {
+        adicionar("positivos"+aba, nome, saldo);
+        dados[aba].positivos.push(file);
+      }
     }
   }
-  return "-";
 }
 
-function pegar(linha) {
-  const nums = linha.match(/\(?\d{1,3}(?:\.\d{3})*,\d{2}\)?/g);
-  return nums ? nums[nums.length - 1] : "-";
+function adicionar(lista, nome, saldo) {
+  const li = document.createElement("li");
+  li.textContent = `${nome} → ${saldo}`;
+  document.getElementById(lista).appendChild(li);
 }
 
-function num(v) {
-  return parseFloat(v.replace(/\./g,"").replace(",",".").replace(/[()]/g,"")) || 0;
-}
+// DOWNLOAD ZIP
+async function baixarZIP(aba, tipo) {
 
-function processar(texto, nome) {
+  if (dados[aba][tipo].length === 0) {
+    alert("Nenhum arquivo encontrado.");
+    return;
+  }
 
-  const empresa = pegarEmpresa(texto);
+  const zip = new JSZip();
 
-  const resultado = pegar((texto.match(/2600.*?\n/)||[""])[0]);
-  const serv = pegar((texto.match(/2700.*?\n/)||[""])[0]);
-  const simp = pegar((texto.match(/2831.*?\n/)||[""])[0]);
-  const prod = pegar((texto.match(/2603.*?\n/)||[""])[0]);
-  const merc = pegar((texto.match(/2652.*?\n/)||[""])[0]);
+  dados[aba][tipo].forEach(f => zip.file(f.name, f));
 
-  const total1 = num(serv)*0.32 + num(simp)*0.05;
-  const total2 = num(prod)*0.08 + num(merc)*0.08 + num(simp)*0.05;
+  const blob = await zip.generateAsync({ type: "blob" });
 
-  const comp1 = total1 > num(resultado) ? "MAIOR" : "MENOR";
-  const comp2 = total2 > num(resultado) ? "MAIOR" : "MENOR";
-
-  const tr = document.createElement("tr");
-
-  tr.innerHTML = `
-  <td>${nome}</td>
-  <td>${empresa}</td>
-  <td>${resultado}</td>
-  <td>${total1.toFixed(2)}</td>
-  <td class="${comp1==="MAIOR"?"maior":"menor"}">${comp1}</td>
-  <td>${total2.toFixed(2)}</td>
-  <td class="${comp2==="MAIOR"?"maior":"menor"}">${comp2}</td>
-  `;
-
-  document.getElementById("tabelaResumo").appendChild(tr);
-}
-
-function exportarExcel(){
-  const wb = XLSX.utils.table_to_book(document.getElementById("tabela"));
-  XLSX.writeFile(wb,"resultado.xlsx");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${tipo}_aba${aba}.zip`;
+  a.click();
 }
 
 </script>
