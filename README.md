@@ -274,8 +274,3 @@ reader.readAsArrayBuffer(file);
 
 </body>
 </html>
-
-</script>
-
-</body>
-</html>
